@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickhouse-monitor
+  namespace: flow-visibility
+spec:
+  schedule: "* * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: clickhouse-monitor
+        spec:
+          containers:
+          - name: clickhouse-monitor
+            image: aurorazhou/clickhouse-monitor-cronjob:latest
+            imagePullPolicy: IfNotPresent
+          restartPolicy: OnFailure

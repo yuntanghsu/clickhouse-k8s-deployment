@@ -1,0 +1,42 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-ssd
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: "pv-resize"
+spec:
+  configuration:
+    clusters:
+      - name: "pv-resize"
+        templates:
+          podTemplate: pod-template-with-volumes
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+
+  templates:
+    podTemplates:
+      - name: pod-template-with-volumes
+        spec:
+          containers:
+            - name: clickhouse
+              image: yandex/clickhouse-server:20.7
+              volumeMounts:
+                - name: data-storage-vc-template
+                  mountPath: /var/lib/clickhouse
+
+    volumeClaimTemplates:
+      - name: data-storage-vc-template
+        spec:
+          storageClassName: fast
+          accessModes: 
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Mi

@@ -1,0 +1,32 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: test-clickhouse
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: basic
+  namespace: test-clickhouse
+spec:
+  configuration:
+    clusters:
+      - name: "deployment"
+        templates:
+          podTemplate: restrict-memory
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+
+  templates:
+    podTemplates:
+      - name: restrict-memory
+        spec:
+          containers:
+            - name: clickhouse
+              image: yandex/clickhouse-server:21.11
+              resources:
+                requests:
+                  memory: "990Mi"
+                limits:
+                  memory: "990Mi"

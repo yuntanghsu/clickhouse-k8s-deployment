@@ -1,0 +1,54 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: test-clickhouse
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: in-memory
+  namespace: test-clickhouse
+spec:
+  configuration:
+    clusters:
+      - name: "deployment"
+        templates:
+          podTemplate: RAM-clickhouse
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+  templates:
+    podTemplates:
+      - name: RAM-clickhouse
+        spec:
+          containers:
+            - name: clickhouse
+              image: yandex/clickhouse-server:21.11
+              volumeMounts:
+                - name: clickhouse-storage
+                  mountPath: /var/lib/clickhouse
+          volumes:
+            - name: clickhouse-storage
+              emptyDir:
+                medium: Memory
+                # sizeLimit: 500Mi
+  
+  #   files:
+  #     config.d/config.xml: |
+  #       <yandex>
+  #         <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+  #       </yandex>
+  # templates:
+  #   podTemplates:
+  #     - name: restrict-memory
+  #       spec:
+  #         containers:
+  #           - name: clickhouse
+  #             image: yandex/clickhouse-server:20.7
+  #             resources:
+  #               requests:
+  #                 memory: "64Mi"
+  #                 cpu: "250m"
+  #               limits:
+  #                 memory: "128Mi"
+  #                 cpu: "500m"

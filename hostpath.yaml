@@ -1,0 +1,34 @@
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: "hostpath"
+spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse-per-host-on-servers
+  configuration:
+    clusters:
+      - name: deployment
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+
+  templates:
+    podTemplates:
+      # Specify Pod Templates with affinity
+
+      - name: clickhouse-per-host-on-servers
+        spec:
+          volumes:
+            # Specify volume as path on local filesystem as a directory which will be created, if need be
+            - name: local-path
+              hostPath:
+                path: /Users/zhouya/Documents/go/src/clickhouse/data
+                type: DirectoryOrCreate
+          containers:
+            - name: clickhouse-pod
+              image: yandex/clickhouse-server:20.7
+              volumeMounts:
+                # Specify reference to volume on local filesystem
+                - name: local-path
+                  mountPath: /var/lib/clickhouse
