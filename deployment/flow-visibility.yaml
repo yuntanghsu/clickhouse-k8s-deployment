@@ -110,7 +110,7 @@ spec:
           serviceAccountName: clickhouse-monitor
           containers:
           - name: clickhouse-monitor
-            image: projects.registry.vmware.com/antrea/flow-visibility-clickhouse-monitor:latest
+            image: aurorazhou/clickhouse-monitor:latest
             imagePullPolicy: IfNotPresent
             env:
               - name: CH_USERNAME
