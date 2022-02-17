@@ -17,7 +17,7 @@ import (
 )
 
 func createClickHouseClient() *sql.DB {
-	connect, err := sql.Open("clickhouse", "tcp://localhost:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
+	connect, err := sql.Open("clickhouse", "tcp://10.100.230.147:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
 	if err != nil {
 		klog.Fatal(err)
 	}
