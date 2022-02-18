@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"gonum.org/v1/plot"
@@ -16,8 +18,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var availability []int
+var recordPerCommit, commitNum, insertInterval int
+
+func SetupCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		writeToFile(availability)
+		os.Exit(0)
+	}()
+}
+
 func createClickHouseClient() *sql.DB {
-	connect, err := sql.Open("clickhouse", "tcp://10.100.230.147:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
+	connect, err := sql.Open("clickhouse", "tcp://localhost:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
 	if err != nil {
 		klog.Fatal(err)
 	}
@@ -151,8 +166,8 @@ func addFakeRecord(stmt *sql.Stmt) {
 	}
 }
 
-func writeRecords(recordPerCommit, commitNum int, connect *sql.DB) {
-	var availability []int
+func writeRecords(recordPerCommit, commitNum int, insertInterval int, connect *sql.DB) {
+
 	for i := 0; i < commitNum; i++ {
 		var (
 			tx, _   = connect.Begin()
@@ -170,16 +185,17 @@ func writeRecords(recordPerCommit, commitNum int, connect *sql.DB) {
 			availability = append(availability, 1)
 		}
 		// wait 1 second before next write
-		time.Sleep(time.Second)
+		time.Sleep(time.Duration(insertInterval) * time.Second)
 	}
 	// plotAvailability(availability, commitNum)
 	writeToFile(availability)
 }
 
 func writeToFile(data []int) {
-	f, err := os.Create("data.csv")
+	fileName := fmt.Sprintf("data_4g_%d_%ds.csv", recordPerCommit, insertInterval)
+	f, err := os.Create(fileName)
 	if err != nil {
-		klog.Fatal(err)
+		klog.Error(err)
 	}
 	defer f.Close()
 	for i, value := range data {
@@ -219,14 +235,16 @@ func setTTLMergeTimeout(connect *sql.DB) {
 }
 
 func main() {
-	var recordPerCommit, commitNum int
 	// example: write 100,000 records at a time, 20 writes in total
 	// go run . -r 100000 -c 20
 	flag.IntVar(&recordPerCommit, "r", 1, "records number per commit")
 	flag.IntVar(&commitNum, "c", 1, "commits number")
+	flag.IntVar(&insertInterval, "i", 1, "insertion interval")
 	flag.Parse()
 
 	connect := createClickHouseClient()
-	writeRecords(recordPerCommit, commitNum, connect)
+
+	SetupCloseHandler()
+	writeRecords(recordPerCommit, commitNum, insertInterval, connect)
 
 }
