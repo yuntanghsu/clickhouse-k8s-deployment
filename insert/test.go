@@ -32,7 +32,7 @@ func SetupCloseHandler() {
 }
 
 func createClickHouseClient() *sql.DB {
-	connect, err := sql.Open("clickhouse", "tcp://10.106.78.119:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
+	connect, err := sql.Open("clickhouse", "tcp://10.110.67.208:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
 	if err != nil {
 		klog.Fatal(err)
 	}
