@@ -32,7 +32,7 @@ func SetupCloseHandler() {
 }
 
 func createClickHouseClient() *sql.DB {
-	connect, err := sql.Open("clickhouse", "tcp://10.99.242.170:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
+	connect, err := sql.Open("clickhouse", "tcp://10.108.168.211:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
 	if err != nil {
 		klog.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func writeRecords(recordPerCommit, commitNum int, insertInterval int, connect *s
 }
 
 func writeToFile(data []int) {
-	fileName := fmt.Sprintf("data_8g_%d_%ds.csv", recordPerCommit, insertInterval)
+	fileName := fmt.Sprintf("data_2g_%d_%ds.csv", recordPerCommit, insertInterval)
 	f, err := os.Create(fileName)
 	if err != nil {
 		klog.Error(err)
