@@ -18,21 +18,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var availability []int
-var recordPerCommit, commitNum, insertInterval int
+// var availability []int
+var recordPerCommit, commitNum, insertInterval, memorySize int
+var availableTime, totalTime int
+var host string
 
 func SetupCloseHandler() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		writeToFile(availability)
+		// writeToFile(availability)
+		logResult()
 		os.Exit(0)
 	}()
 }
 
 func createClickHouseClient() *sql.DB {
-	connect, err := sql.Open("clickhouse", "tcp://10.99.130.58:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password")
+	hostAddress := fmt.Sprintf("tcp://%s:9000?debug=true&username=clickhouse_operator&password=clickhouse_operator_password", host)
+	connect, err := sql.Open("clickhouse", hostAddress)
 	if err != nil {
 		klog.Fatal(err)
 	}
@@ -166,7 +170,7 @@ func addFakeRecord(stmt *sql.Stmt) {
 	}
 }
 
-func writeRecords(recordPerCommit, commitNum int, insertInterval int, connect *sql.DB) {
+func writeRecords(connect *sql.DB) {
 
 	for i := 0; i < commitNum; i++ {
 		var (
@@ -180,19 +184,33 @@ func writeRecords(recordPerCommit, commitNum int, insertInterval int, connect *s
 		fmt.Println(i)
 		if err := tx.Commit(); err != nil {
 			fmt.Printf("Error: %v", err)
-			availability = append(availability, 0)
+			// availability = append(availability, 0)
 		} else {
-			availability = append(availability, 1)
+			availableTime += 1
+			// availability = append(availability, 1)
 		}
-		// wait 1 second before next write
+		totalTime += 1
 		time.Sleep(time.Duration(insertInterval) * time.Second)
 	}
 	// plotAvailability(availability, commitNum)
-	writeToFile(availability)
+	// writeToFile(availability)
+	logResult()
+}
+
+func logResult() {
+	f, err := os.OpenFile("test.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		klog.Error(err)
+	}
+	defer f.Close()
+	result := fmt.Sprintf("memory_size=%dg, batch_size=%d, batch_frequecy=%ds, insert_rate=%d, availibility=%f, duration=%d\n", memorySize, recordPerCommit, insertInterval, recordPerCommit/insertInterval, float32(availableTime)/float32(totalTime), totalTime*insertInterval)
+	if _, err := f.WriteString(result); err != nil {
+		klog.Error(err)
+	}
 }
 
 func writeToFile(data []int) {
-	fileName := fmt.Sprintf("data_2g_%d_%ds.csv", recordPerCommit, insertInterval)
+	fileName := fmt.Sprintf("data_4g_%d_%ds.csv", recordPerCommit, insertInterval)
 	f, err := os.Create(fileName)
 	if err != nil {
 		klog.Error(err)
@@ -236,15 +254,17 @@ func setTTLMergeTimeout(connect *sql.DB) {
 
 func main() {
 	// example: write 100,000 records at a time, 20 writes in total
-	// go run . -r 100000 -c 20
+	// go run . -r 1000 -c 1800 -i 1 -m 2 -h 127.0.0.1
 	flag.IntVar(&recordPerCommit, "r", 1, "records number per commit")
 	flag.IntVar(&commitNum, "c", 1, "commits number")
 	flag.IntVar(&insertInterval, "i", 1, "insertion interval")
+	flag.IntVar(&memorySize, "m", 1, "memory size(Gb)")
+	flag.StringVar(&host, "h", "localhost", "Clickhouse address")
 	flag.Parse()
 
 	connect := createClickHouseClient()
 
 	SetupCloseHandler()
-	writeRecords(recordPerCommit, commitNum, insertInterval, connect)
+	writeRecords(connect)
 
 }

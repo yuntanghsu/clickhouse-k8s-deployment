@@ -24,10 +24,13 @@ start_flow_visibility() {
   kubectl create configmap clickhouse-mounted-configmap -n flow-visibility --from-file=${THIS_DIR}/datasources/
   kubectl apply -f ${THIS_DIR}/flow-visibility.yaml -n flow-visibility
 
-  echo "=== Waiting for Clickhouse and Grafana to be ready ==="
+  echo "=== Waiting for Clickhouse to be ready ==="
   sleep 10
   kubectl wait --for=condition=ready pod -l app=clickhouse-operator -n kube-system --timeout=60s
-  kubectl wait --for=condition=ready pod -l app=clickhouse -n flow-visibility --timeout=60s
+  kubectl wait --for=condition=ready pod -l app=clickhouse -n flow-visibility --timeout=120s
+
+  CLICKHOUSE_HOST=$(kubectl get svc clickhouse-clickhouse -n flow-visibility -o jsonpath='{.spec.clusterIP}')
+  echo "=== Clickhouse can be connected at ${CLICKHOUSE_HOST} ==="
 }
 
 start_flow_visibility
