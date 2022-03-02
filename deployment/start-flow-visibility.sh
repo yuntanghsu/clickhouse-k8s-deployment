@@ -25,7 +25,7 @@ start_flow_visibility() {
   kubectl apply -f ${THIS_DIR}/flow-visibility.yaml -n flow-visibility
 
   echo "=== Waiting for Clickhouse to be ready ==="
-  sleep 10
+  sleep 15
   kubectl wait --for=condition=ready pod -l app=clickhouse-operator -n kube-system --timeout=60s
   kubectl wait --for=condition=ready pod -l app=clickhouse -n flow-visibility --timeout=120s
 
