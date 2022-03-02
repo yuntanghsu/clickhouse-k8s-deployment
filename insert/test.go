@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 
 // var availability []int
 var recordPerCommit, commitNum, insertInterval, memorySize int
-var availableTime, totalTime int
+var availableTime, totalTime int32
 var host string
 
 // log results when the program is interupted
@@ -113,29 +114,24 @@ func addFakeRecord(stmt *sql.Stmt) {
 
 func writeRecords(connect *sql.DB) {
 
-	for i := 0; i < commitNum; i++ {
-		var (
-			tx, _   = connect.Begin()
-			stmt, _ = tx.Prepare("INSERT INTO flows (timeInserted,flowStartSeconds,flowEndSeconds,flowEndSecondsFromSourceNode,flowEndSecondsFromDestinationNode,flowEndReason,sourceIP,destinationIP,sourceTransportPort,destinationTransportPort,protocolIdentifier,packetTotalCount,octetTotalCount,packetDeltaCount,octetDeltaCount,reversePacketTotalCount,reverseOctetTotalCount,reversePacketDeltaCount,reverseOctetDeltaCount,sourcePodName,sourcePodNamespace,sourceNodeName,destinationPodName,destinationPodNamespace,destinationNodeName,destinationClusterIP,destinationServicePort,destinationServicePortName,ingressNetworkPolicyName,ingressNetworkPolicyNamespace,ingressNetworkPolicyRuleName,ingressNetworkPolicyRuleAction,ingressNetworkPolicyType, egressNetworkPolicyName,egressNetworkPolicyNamespace,egressNetworkPolicyRuleName,egressNetworkPolicyRuleAction,egressNetworkPolicyType,tcpState,flowType,sourcePodLabels,destinationPodLabels,throughput,reverseThroughput,throughputFromSourceNode,throughputFromDestinationNode,reverseThroughputFromSourceNode,reverseThroughputFromDestinationNode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-		)
-		defer stmt.Close()
-		for j := 0; j < recordPerCommit; j++ {
-			addFakeRecord(stmt)
-		}
-		fmt.Println(i)
-		if err := tx.Commit(); err != nil {
-			fmt.Printf("Error: %v", err)
-			// availability = append(availability, 0)
-		} else {
-			availableTime += 1
-			// availability = append(availability, 1)
-		}
-		totalTime += 1
-		time.Sleep(time.Duration(insertInterval) * time.Second)
+	var (
+		tx, _   = connect.Begin()
+		stmt, _ = tx.Prepare("INSERT INTO flows (timeInserted,flowStartSeconds,flowEndSeconds,flowEndSecondsFromSourceNode,flowEndSecondsFromDestinationNode,flowEndReason,sourceIP,destinationIP,sourceTransportPort,destinationTransportPort,protocolIdentifier,packetTotalCount,octetTotalCount,packetDeltaCount,octetDeltaCount,reversePacketTotalCount,reverseOctetTotalCount,reversePacketDeltaCount,reverseOctetDeltaCount,sourcePodName,sourcePodNamespace,sourceNodeName,destinationPodName,destinationPodNamespace,destinationNodeName,destinationClusterIP,destinationServicePort,destinationServicePortName,ingressNetworkPolicyName,ingressNetworkPolicyNamespace,ingressNetworkPolicyRuleName,ingressNetworkPolicyRuleAction,ingressNetworkPolicyType, egressNetworkPolicyName,egressNetworkPolicyNamespace,egressNetworkPolicyRuleName,egressNetworkPolicyRuleAction,egressNetworkPolicyType,tcpState,flowType,sourcePodLabels,destinationPodLabels,throughput,reverseThroughput,throughputFromSourceNode,throughputFromDestinationNode,reverseThroughputFromSourceNode,reverseThroughputFromDestinationNode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	)
+	defer stmt.Close()
+	for j := 0; j < recordPerCommit; j++ {
+		addFakeRecord(stmt)
 	}
-	// plotAvailability(availability, commitNum)
-	// writeToFile(availability)
-	logResult()
+
+	if err := tx.Commit(); err != nil {
+		fmt.Printf("Error: %v", err)
+		// availability = append(availability, 0)
+	} else {
+		atomic.AddInt32(&availableTime, 1)
+		// availability = append(availability, 1)
+	}
+	atomic.AddInt32(&totalTime, 1)
+
 }
 
 func logResult() {
@@ -144,7 +140,7 @@ func logResult() {
 		klog.Error(err)
 	}
 	defer f.Close()
-	result := fmt.Sprintf("memory_size=%dg, batch_size=%d, batch_frequecy=%ds, insert_rate=%d, availibility=%f, duration=%d\n", memorySize, recordPerCommit, insertInterval, recordPerCommit/insertInterval, float32(availableTime)/float32(totalTime), totalTime*insertInterval)
+	result := fmt.Sprintf("memory_size=%dg, batch_size=%d, batch_frequecy=%ds, insert_rate=%d, availibility=%f, duration=%d\n", memorySize, recordPerCommit, insertInterval, recordPerCommit/insertInterval, float32(availableTime)/float32(totalTime), int(totalTime)*insertInterval)
 	if _, err := f.WriteString(result); err != nil {
 		klog.Error(err)
 	}
@@ -164,11 +160,18 @@ func main() {
 	connect := createClickHouseClient()
 
 	SetupCloseHandler()
-	writeRecords(connect)
 
+	for i := 0; i < commitNum; i++ {
+		fmt.Println(i)
+		go writeRecords(connect)
+		time.Sleep(time.Duration(insertInterval) * time.Second)
+	}
+	logResult()
+	// plotAvailability(availability, commitNum)
+	// writeToFile(availability)
 }
 
-// Helpful function not used in performance test
+// Helpful functions not used in performance test
 func writeToFile(data []int) {
 	fileName := fmt.Sprintf("data_4g_%d_%ds.csv", recordPerCommit, insertInterval)
 	f, err := os.Create(fileName)
