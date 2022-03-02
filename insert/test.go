@@ -23,6 +23,7 @@ var recordPerCommit, commitNum, insertInterval, memorySize int
 var availableTime, totalTime int
 var host string
 
+// log results when the program is interupted
 func SetupCloseHandler() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -47,66 +48,6 @@ func createClickHouseClient() *sql.DB {
 			fmt.Println(err)
 		}
 		return nil
-	}
-
-	_, err = connect.Exec(`
-		CREATE TABLE IF NOT EXISTS flows (
-			timeInserted DateTime,
-			flowStartSeconds DateTime,
-			flowEndSeconds DateTime,
-			flowEndSecondsFromSourceNode DateTime,
-			flowEndSecondsFromDestinationNode DateTime,
-			flowEndReason UInt8,
-			sourceIP String,
-			destinationIP String,
-			sourceTransportPort UInt16,
-			destinationTransportPort UInt16,
-			protocolIdentifier UInt8,
-			packetTotalCount UInt64,
-			octetTotalCount UInt64,
-			packetDeltaCount UInt64,
-			octetDeltaCount UInt64,
-			reversePacketTotalCount UInt64,
-			reverseOctetTotalCount UInt64,
-			reversePacketDeltaCount UInt64,
-			reverseOctetDeltaCount UInt64,
-			sourcePodName String,
-			sourcePodNamespace String,
-			sourceNodeName String,
-			destinationPodName String,
-			destinationPodNamespace String,
-			destinationNodeName String,
-			destinationClusterIP String,
-			destinationServicePort UInt16,
-			destinationServicePortName String,
-			ingressNetworkPolicyName String,
-			ingressNetworkPolicyNamespace String,
-			ingressNetworkPolicyRuleName String,
-			ingressNetworkPolicyRuleAction UInt8,
-			ingressNetworkPolicyType UInt8,
-			egressNetworkPolicyName String,
-			egressNetworkPolicyNamespace String,
-			egressNetworkPolicyRuleName String,
-			egressNetworkPolicyRuleAction UInt8,
-			egressNetworkPolicyType UInt8,
-			tcpState String,
-			flowType UInt8,
-			sourcePodLabels String,
-			destinationPodLabels String,
-			throughput UInt64,
-			reverseThroughput UInt64,
-			throughputFromSourceNode UInt64,
-			throughputFromDestinationNode UInt64,
-			reverseThroughputFromSourceNode UInt64,
-			reverseThroughputFromDestinationNode UInt64,
-			trusted Bool
-		) engine=MergeTree
-		ORDER BY (timeInserted, flowEndSeconds)
-		TTL timeInserted + INTERVAL 10 MINUTE
-		SETTINGS merge_with_ttl_timeout = 600;
-	`)
-	if err != nil {
-		klog.Fatal(err)
 	}
 	return connect
 }
@@ -209,6 +150,25 @@ func logResult() {
 	}
 }
 
+func main() {
+	// example: write 1,000 records in a batch, 1800 writes in total,
+	// insertion interval at 1s, log with memory size 2G and connect to clickhouse host at 127.0.0.1
+	// go run . -r 1000 -c 1800 -i 1 -m 2 -h 127.0.0.1
+	flag.IntVar(&recordPerCommit, "r", 1, "records number per commit")
+	flag.IntVar(&commitNum, "c", 1, "commits number")
+	flag.IntVar(&insertInterval, "i", 1, "insertion interval")
+	flag.IntVar(&memorySize, "m", 1, "memory size(Gb)")
+	flag.StringVar(&host, "h", "localhost", "Clickhouse address")
+	flag.Parse()
+
+	connect := createClickHouseClient()
+
+	SetupCloseHandler()
+	writeRecords(connect)
+
+}
+
+// Helpful function not used in performance test
 func writeToFile(data []int) {
 	fileName := fmt.Sprintf("data_4g_%d_%ds.csv", recordPerCommit, insertInterval)
 	f, err := os.Create(fileName)
@@ -250,21 +210,4 @@ func setTTLMergeTimeout(connect *sql.DB) {
 	if _, err := connect.Exec("ALTER TABLE default.antrea MODIFY SETTING merge_with_ttl_timeout = 600"); err != nil {
 		klog.Fatal(err)
 	}
-}
-
-func main() {
-	// example: write 100,000 records at a time, 20 writes in total
-	// go run . -r 1000 -c 1800 -i 1 -m 2 -h 127.0.0.1
-	flag.IntVar(&recordPerCommit, "r", 1, "records number per commit")
-	flag.IntVar(&commitNum, "c", 1, "commits number")
-	flag.IntVar(&insertInterval, "i", 1, "insertion interval")
-	flag.IntVar(&memorySize, "m", 1, "memory size(Gb)")
-	flag.StringVar(&host, "h", "localhost", "Clickhouse address")
-	flag.Parse()
-
-	connect := createClickHouseClient()
-
-	SetupCloseHandler()
-	writeRecords(connect)
-
 }
