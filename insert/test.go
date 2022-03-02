@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -112,8 +113,8 @@ func addFakeRecord(stmt *sql.Stmt) {
 	}
 }
 
-func writeRecords(connect *sql.DB) {
-
+func writeRecords(connect *sql.DB, wg *sync.WaitGroup) {
+	defer wg.Done()
 	var (
 		tx, _   = connect.Begin()
 		stmt, _ = tx.Prepare("INSERT INTO flows (timeInserted,flowStartSeconds,flowEndSeconds,flowEndSecondsFromSourceNode,flowEndSecondsFromDestinationNode,flowEndReason,sourceIP,destinationIP,sourceTransportPort,destinationTransportPort,protocolIdentifier,packetTotalCount,octetTotalCount,packetDeltaCount,octetDeltaCount,reversePacketTotalCount,reverseOctetTotalCount,reversePacketDeltaCount,reverseOctetDeltaCount,sourcePodName,sourcePodNamespace,sourceNodeName,destinationPodName,destinationPodNamespace,destinationNodeName,destinationClusterIP,destinationServicePort,destinationServicePortName,ingressNetworkPolicyName,ingressNetworkPolicyNamespace,ingressNetworkPolicyRuleName,ingressNetworkPolicyRuleAction,ingressNetworkPolicyType, egressNetworkPolicyName,egressNetworkPolicyNamespace,egressNetworkPolicyRuleName,egressNetworkPolicyRuleAction,egressNetworkPolicyType,tcpState,flowType,sourcePodLabels,destinationPodLabels,throughput,reverseThroughput,throughputFromSourceNode,throughputFromDestinationNode,reverseThroughputFromSourceNode,reverseThroughputFromDestinationNode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -160,12 +161,15 @@ func main() {
 	connect := createClickHouseClient()
 
 	SetupCloseHandler()
+	var wg sync.WaitGroup
 
 	for i := 0; i < commitNum; i++ {
 		fmt.Println(i)
-		go writeRecords(connect)
+		wg.Add(1)
+		go writeRecords(connect, &wg)
 		time.Sleep(time.Duration(insertInterval) * time.Second)
 	}
+	wg.Wait()
 	logResult()
 	// plotAvailability(availability, commitNum)
 	// writeToFile(availability)
