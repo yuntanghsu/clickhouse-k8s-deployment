@@ -1,0 +1,67 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: clickhouse-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: True
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: clickhouse-pv
+spec:
+  storageClassName: clickhouse-storage
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  # mkdir /data/clickhouse on node
+  local:
+    path: /data/clickhouse
+  # kubectl label nodes <NODE_NAME> clickhouse/instance=data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: clickhouse/instance
+          operator: In
+          values:
+          - data
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: pv
+spec:
+  configuration:
+    clusters:
+    - layout:
+        replicasCount: 1
+        shardsCount: 1
+      name: clickhouse
+  defaults:
+    templates:
+      podTemplate: pod-template
+      dataVolumeClaimTemplate: clickhouse-storage-template
+  templates:
+    podTemplates:
+    - name: pod-template
+      spec:
+        containers:
+        - image: yandex/clickhouse-server:21.11
+          name: clickhouse
+    volumeClaimTemplates:
+      - name: clickhouse-storage-template
+        spec:
+          storageClassName: clickhouse-storage
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          selector:
+            matchLabels:
+              app: clickhouse
