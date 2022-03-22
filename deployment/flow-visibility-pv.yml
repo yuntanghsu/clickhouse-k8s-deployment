@@ -1,0 +1,173 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clickhouse-secret
+type: Opaque
+stringData:
+  username: clickhouse_operator
+  password: clickhouse_operator_password
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: clickhouse-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: True
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: clickhouse-pv
+spec:
+  storageClassName: clickhouse-storage
+  capacity:
+    storage: 8Gi
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  local:
+    path: /data/clickhouse
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: clickhouse/instance
+          operator: In
+          values:
+          - data
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: clickhouse
+  labels:
+    app: clickhouse
+spec:
+  configuration:
+    clusters:
+      - name: "clickhouse"
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+  defaults:
+    templates:
+      podTemplate: pod-template
+      dataVolumeClaimTemplate: clickhouse-storage-template
+  templates:
+    volumeClaimTemplates:
+      - name: clickhouse-storage-template
+        spec:
+          storageClassName: clickhouse-storage
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 8Gi
+    podTemplates:
+      - name: pod-template
+        spec:
+          containers:
+            - name: clickhouse
+              image: yandex/clickhouse-server:21.11
+              volumeMounts:
+                - name: clickhouse-configmap-volume
+                  mountPath: /docker-entrypoint-initdb.d
+          volumes:
+            - name: clickhouse-configmap-volume
+              configMap:
+                name: clickhouse-mounted-configmap
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: flow-visibility
+  name: clickhouse-monitor
+  namespace: flow-visibility
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app: flow-visibility
+  name: clickhouse-monitor-role
+  namespace: flow-visibility
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: flow-visibility
+  name: clickhouse-monitor-role-binding
+  namespace: flow-visibility
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: clickhouse-monitor-role
+subjects:
+  - kind: ServiceAccount
+    name: clickhouse-monitor
+    namespace: flow-visibility
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: clickhouse-monitor
+  name: clickhouse-monitor
+  namespace: flow-visibility
+spec:
+  schedule: "* * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: clickhouse-monitor
+        spec:
+          serviceAccountName: clickhouse-monitor
+          containers:
+          - name: clickhouse-monitor
+            image: aurorazhou/clickhouse-monitor:latest
+            imagePullPolicy: IfNotPresent
+            env:
+              - name: CH_USERNAME
+                valueFrom:
+                  secretKeyRef: 
+                    name: clickhouse-secret
+                    key: username
+              - name: CH_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: clickhouse-secret
+                    key: password
+              - name: SVC_HOST
+                value: "clickhouse-clickhouse.flow-visibility.svc.cluster.local"
+              - name: SVC_PORT
+                value: "9000"
+              - name: TABLE_NAME
+                value: "default.flows"
+              - name: MV_NAMES
+                value: "default.flows_pod_view default.flows_node_view default.flows_policy_view"
+              - name: NAMESPACE
+                value: "flow-visibility"
+              - name: MONITOR_LABEL
+                value: "app=clickhouse-monitor"
+          restartPolicy: OnFailure

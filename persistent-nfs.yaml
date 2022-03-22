@@ -1,0 +1,25 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: clickhouse-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: True
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-volume
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 8Gi
+  storageClassName: ""
+  persistentVolumeReclaimPolicy: Recycle
+  volumeMode: Filesystem
+  nfs:
+    server: 344c09756d4b
+    path: /data
+    readOnly: no

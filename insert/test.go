@@ -32,7 +32,7 @@ func SetupCloseHandler() {
 	go func() {
 		<-c
 		// writeToFile(availability)
-		logResult()
+		// logResult()
 		os.Exit(0)
 	}()
 }
@@ -170,7 +170,7 @@ func main() {
 		time.Sleep(time.Duration(insertInterval) * time.Second)
 	}
 	wg.Wait()
-	logResult()
+	// logResult()
 	// plotAvailability(availability, commitNum)
 	// writeToFile(availability)
 }
