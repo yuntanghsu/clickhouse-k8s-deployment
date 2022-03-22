@@ -24,7 +24,7 @@ import (
 var recordPerCommit, commitNum, insertInterval, memorySize int
 var availableTime, totalTime int32
 var host string
-var timeTakenInMs float64
+var timeTakenInMs int64
 
 // log results when the program is interupted
 func SetupCloseHandler() {
@@ -132,7 +132,7 @@ func writeRecords(connect *sql.DB, wg *sync.WaitGroup) {
 		atomic.AddInt32(&availableTime, 1)
 		// availability = append(availability, 1)
 	}
-	timeTakenInMs += float64(time.Since(startTime).Milliseconds())
+	atomic.AddInt64(&timeTakenInMs, int64(time.Since(startTime).Milliseconds()))
 	atomic.AddInt32(&totalTime, 1)
 
 }
@@ -172,7 +172,7 @@ func main() {
 		time.Sleep(time.Duration(insertInterval) * time.Second)
 	}
 	wg.Wait()
-	timeTakenInMs /= float64(commitNum)
+	timeTakenInMs /= int64(commitNum)
 	klog.InfoS("Logging...", "Time spent for each commit in ms", timeTakenInMs)
 
 	// logResult()
