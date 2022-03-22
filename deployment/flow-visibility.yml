@@ -7,30 +7,6 @@ stringData:
   username: clickhouse_operator
   password: clickhouse_operator_password
 ---
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: clickhouse-storage
-provisioner: kubernetes.io/no-provisioner
-volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
-allowVolumeExpansion: True
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: clickhouse-pv
-  labels:
-    app: clickhouse
-spec:
-  storageClassName: clickhouse-storage
-  capacity:
-    storage: 8Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/data/clickhouse"
----
 apiVersion: "clickhouse.altinity.com/v1"
 kind: "ClickHouseInstallation"
 metadata:
@@ -47,17 +23,7 @@ spec:
   defaults:
     templates:
       podTemplate: pod-template
-      dataVolumeClaimTemplate: clickhouse-storage-template
   templates:
-    volumeClaimTemplates:
-      - name: clickhouse-storage-template
-        spec:
-          storageClassName: clickhouse-storage
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 8Gi
     podTemplates:
       - name: pod-template
         spec:
@@ -67,10 +33,16 @@ spec:
               volumeMounts:
                 - name: clickhouse-configmap-volume
                   mountPath: /docker-entrypoint-initdb.d
+                - name: clickhouse-storage-volume
+                  mountPath: /var/lib/clickhouse
           volumes:
             - name: clickhouse-configmap-volume
               configMap:
                 name: clickhouse-mounted-configmap
+            - name: clickhouse-storage-volume
+              emptyDir:
+                medium: Memory
+                sizeLimit: 4Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
