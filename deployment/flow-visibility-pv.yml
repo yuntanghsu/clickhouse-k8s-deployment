@@ -25,7 +25,7 @@ metadata:
 spec:
   storageClassName: clickhouse-storage
   capacity:
-    storage: 2Gi
+    storage: 8Gi
   accessModes:
     - ReadWriteOnce
   hostPath:

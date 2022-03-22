@@ -22,7 +22,7 @@ start_flow_visibility() {
   kubectl apply -f https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator/clickhouse-operator-install-bundle.yaml
   kubectl create namespace flow-visibility
   kubectl create configmap clickhouse-mounted-configmap -n flow-visibility --from-file=${THIS_DIR}/datasources/
-  kubectl apply -f ${THIS_DIR}/flow-visibility-pv.yaml -n flow-visibility
+  kubectl apply -f ${THIS_DIR}/flow-visibility-pv.yml -n flow-visibility
 
   echo "=== Waiting for Clickhouse to be ready ==="
   sleep 15

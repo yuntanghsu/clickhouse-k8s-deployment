@@ -123,7 +123,7 @@ func writeRecords(connect *sql.DB, wg *sync.WaitGroup) {
 	for j := 0; j < recordPerCommit; j++ {
 		addFakeRecord(stmt)
 	}
-
+        startTime := time.Now()
 	if err := tx.Commit(); err != nil {
 		fmt.Printf("Error: %v", err)
 		// availability = append(availability, 0)
@@ -131,6 +131,7 @@ func writeRecords(connect *sql.DB, wg *sync.WaitGroup) {
 		atomic.AddInt32(&availableTime, 1)
 		// availability = append(availability, 1)
 	}
+	fmt.Println("Time spent for commit: ", time.Now().Sub(startTime))
 	atomic.AddInt32(&totalTime, 1)
 
 }
