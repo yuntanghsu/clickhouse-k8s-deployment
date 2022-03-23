@@ -7,19 +7,34 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 allowVolumeExpansion: True
 ---
-apiVersion: v1
-kind: PersistentVolume
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
 metadata:
-  name: nfs-volume
+  name: pv
 spec:
-  accessModes:
-    - ReadWriteOnce
-  capacity:
-    storage: 8Gi
-  storageClassName: ""
-  persistentVolumeReclaimPolicy: Recycle
-  volumeMode: Filesystem
-  nfs:
-    server: 344c09756d4b
-    path: /data
-    readOnly: no
+  configuration:
+    clusters:
+    - layout:
+        replicasCount: 1
+        shardsCount: 1
+      name: clickhouse
+  defaults:
+    templates:
+      podTemplate: pod-template
+      dataVolumeClaimTemplate: clickhouse-storage-template
+  templates:
+    podTemplates:
+    - name: pod-template
+      spec:
+        containers:
+        - image: yandex/clickhouse-server:21.11
+          name: clickhouse
+    volumeClaimTemplates:
+      - name: clickhouse-storage-template
+        spec:
+          storageClassName: nfs-client
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
