@@ -1,0 +1,71 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: nfs-client-provisioner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccountName: nfs-client-provisioner
+      containers:
+        - name: nfs-client-provisioner
+          image: quay.io/external_storage/nfs-client-provisioner:latest
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: fuseim.pri/ifs
+            - name: NFS_SERVER
+              value: 10.103.208.229
+            - name: NFS_PATH
+              value: /
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 10.103.208.229
+            path: /
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: managed-nfs-storage
+provisioner: fuseim.pri/ifs
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: "ClickHouseInstallation"
+metadata:
+  name: pv
+spec:
+  configuration:
+    clusters:
+    - layout:
+        replicasCount: 1
+        shardsCount: 1
+      name: clickhouse
+  defaults:
+    templates:
+      podTemplate: pod-template
+      dataVolumeClaimTemplate: clickhouse-storage-template
+  templates:
+    podTemplates:
+    - name: pod-template
+      spec:
+        containers:
+        - image: yandex/clickhouse-server:21.11
+          name: clickhouse
+    volumeClaimTemplates:
+      - name: clickhouse-storage-template
+        spec:
+          storageClassName: managed-nfs-storage
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+
