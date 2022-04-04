@@ -16,7 +16,4 @@ VOLUME /exports
 
 EXPOSE 111/udp 2049/tcp
 
-RUN useradd user
-USER user
-
 ENTRYPOINT ["/usr/local/bin/nfs_setup"]
