@@ -15,8 +15,8 @@ spec:
         templates:
           podTemplate: RAM-clickhouse
         layout:
-          shardsCount: 1
-          replicasCount: 1
+          shardsCount: 2
+          replicasCount: 2
   templates:
     podTemplates:
       - name: RAM-clickhouse

@@ -13,7 +13,7 @@ spec:
   configuration:
     zookeeper:
       nodes:
-      - host: zookeeper.zoo1ns
+      - host: zookeepers.zoons
     clusters:
       - name: replicated
         layout:
