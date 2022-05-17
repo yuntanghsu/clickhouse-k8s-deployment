@@ -1,5 +1,3 @@
-
-   
 #!/bin/bash
 
 ZK_NAMESPACE="${ZK_NAMESPACE:-zoo3ns}"

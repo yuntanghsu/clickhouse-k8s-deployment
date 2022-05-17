@@ -60,8 +60,8 @@ metadata:
   name: clickhouse-mounted-configmap
   namespace: flow-visibility
 data:
-  create_table.sh: |-
-    #!/usr/bin/env bash
+  create_table.sh: |
+    #!/usr/bin/ bash
     
     # Copyright 2022 Antrea Authors.
     #
@@ -129,7 +129,7 @@ data:
             reverseThroughputFromSourceNode UInt64,
             reverseThroughputFromDestinationNode UInt64,
             trusted UInt8 DEFAULT 0
-        ) engine=ReplicatedMergeTree('/clickhouse/{installation}/{cluster}/tables/{shard}/{database}/{table}', '{replica}')
+        ) engine=ReplicatedMergeTree('/clickhouse/{installation}/{cluster}/tables/{shard}/{database}/flows_local', '{replica}')
         ORDER BY (timeInserted, flowEndSeconds)
         TTL timeInserted + INTERVAL 3600 SECOND
         SETTINGS merge_with_ttl_timeout = 3600;
@@ -278,19 +278,19 @@ data:
         ORDER BY (timeCreated);
         CREATE TABLE IF NOT EXISTS flows on cluster '{cluster}' AS flows_local
         engine=Distributed('{cluster}', default, flows_local, rand());
-    
+
         CREATE TABLE IF NOT EXISTS flows_pod_view on cluster '{cluster}' AS flows_pod_view_local
         engine=Distributed('{cluster}', default, flows_pod_view_local, rand());
-    
+
         CREATE TABLE IF NOT EXISTS flows_node_view on cluster '{cluster}' AS flows_node_view_local
         engine=Distributed('{cluster}', default, flows_node_view_local, rand());
-    
+
         CREATE TABLE IF NOT EXISTS flows_policy_view on cluster '{cluster}' AS flows_policy_view_local
         engine=Distributed('{cluster}', default, flows_pod_view_local, rand());
-    
+
         CREATE TABLE IF NOT EXISTS recommendations on cluster '{cluster}' AS recommendations_local
         engine=Distributed('{cluster}', default, recommendations_local, rand());
-    
+
     EOSQL
 ---
 # Source: theia/templates/grafana/dashboard-configmap.yaml
@@ -5026,6 +5026,8 @@ spec:
           image: projects.registry.vmware.com/antrea/flow-visibility-grafana:8.3.3
           imagePullPolicy: IfNotPresent
           env:
+            - name: GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS
+              value: vertamedia-clickhouse-datasource
             - name: GF_INSTALL_PLUGINS
               value: "https://downloads.antrea.io/artifacts/grafana-custom-plugins/grafana-sankey-plugin-1.0.0.zip;antreaflowvisibility-grafana-sankey-plugin,grafana-clickhouse-datasource 1.0.1"
             - name: CLICKHOUSE_USERNAME
@@ -5144,10 +5146,10 @@ spec:
           image: "docker.io/zookeeper:3.8.0"
           resources:
             requests:
-              memory: "512M"
-              cpu: "1"
+              memory: "1Gi"
+              cpu: "0.5"
             limits:
-              memory: "4Gi"
+              memory: "16Gi"
               cpu: "2"
           ports:
             - containerPort: 2181
@@ -5282,7 +5284,7 @@ spec:
         - name: datadir-volume
           emptyDir:
             medium: ""
-            sizeLimit: 1Gi
+            sizeLimit: 16Gi
 ---
 # Source: theia/templates/clickhouse/clickhouseinstallation.yaml
 apiVersion: "clickhouse.altinity.com/v1"
@@ -5301,7 +5303,7 @@ spec:
       - name: "clickhouse"
         layout:
           shardsCount: 2
-          replicasCount: 3
+          replicasCount: 1
     zookeeper:
       nodes:
       - host: zookeeper.zoons
@@ -5310,6 +5312,53 @@ spec:
       podTemplate: pod-template
       serviceTemplate: service-template
   templates:
+    podTemplates:
+      - name: pod-template
+        podDistribution:
+          - type: ClickHouseAntiAffinity
+          - type: MaxNumberPerNode
+            number: 1
+            # Apply podDistribution on per-host basis
+            topologyKey: "kubernetes.io/hostname"
+            # Apply podDistribution on per-zone basis
+            #topologyKey: "kubernetes.io/zone"
+        spec:
+          containers:
+            - image: projects.registry.vmware.com/antrea/flow-visibility-clickhouse-server:21.11
+              name: clickhouse
+              volumeMounts:
+                - mountPath: /var/lib/clickhouse
+                  name: clickhouse-storage-volume
+            - env:
+                - name: CLICKHOUSE_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      key: username
+                      name: clickhouse-secret
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: clickhouse-secret
+                - name: DB_URL
+                  value: tcp://localhost:9000
+                - name: TABLE_NAME
+                  value: default.flows_local
+                - name: MV_NAMES
+                  value: default.flows_pod_view_local default.flows_node_view_local default.flows_policy_view_local
+                - name: STORAGE_SIZE
+                  value: 16Gi
+              image: projects.registry.vmware.com/antrea/flow-visibility-clickhouse-monitor:latest
+              imagePullPolicy: IfNotPresent
+              name: clickhouse-monitor
+          volumes:
+            - configMap:
+                name: clickhouse-mounted-configmap
+              name: clickhouse-configmap-volume
+            - emptyDir:
+                medium: Memory
+                sizeLimit: 16Gi
+              name: clickhouse-storage-volume
     serviceTemplates:
       - name: service-template
         spec:
@@ -5318,46 +5367,3 @@ spec:
               port: 8123
             - name: tcp
               port: 9000
-    podTemplates:
-      - name: pod-template
-        spec:
-          containers:
-            - name: clickhouse
-              image: projects.registry.vmware.com/antrea/flow-visibility-clickhouse-server:21.11
-              volumeMounts:
-                - name: clickhouse-storage-volume
-                  mountPath: /var/lib/clickhouse
-            - name: clickhouse-monitor
-              image: projects.registry.vmware.com/antrea/flow-visibility-clickhouse-monitor:latest
-              env:
-                - name: CLICKHOUSE_USERNAME
-                  valueFrom:
-                    secretKeyRef: 
-                      name: clickhouse-secret
-                      key: username
-                - name: CLICKHOUSE_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: clickhouse-secret
-                      key: password
-                - name: DB_URL
-                  value: "tcp://localhost:9000"
-                - name: TABLE_NAME
-                  value: "default.flows"
-                - name: MV_NAMES
-                  value: "default.flows_pod_view default.flows_node_view default.flows_policy_view"
-                - name: STORAGE_SIZE
-                  value: "8Gi"
-                - name: THRESHOLD
-                  value: "0.5"
-                - name: DELETE_PERCENTAGE
-                  value: "0.5"
-              imagePullPolicy: IfNotPresent
-          volumes:
-            - name: clickhouse-configmap-volume
-              configMap:
-                name: clickhouse-mounted-configmap
-            - name: clickhouse-storage-volume
-              emptyDir:
-                medium: Memory
-                sizeLimit: 8Gi
